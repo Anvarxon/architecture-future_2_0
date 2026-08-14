@@ -1,0 +1,28 @@
+# Альтернатива Yandex Object Storage: локальный MinIO.
+# Удобно для отладки пайплайна без облачного аккаунта.
+#
+#   docker run -d -p 9000:9000 -p 9001:9001 \
+#     -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+#     quay.io/minio/minio server /data --console-address ":9001"
+#   mc alias set local http://localhost:9000 minioadmin minioadmin
+#   mc mb local/future20-tfstate
+#
+#   export AWS_ACCESS_KEY_ID=minioadmin
+#   export AWS_SECRET_ACCESS_KEY=minioadmin
+#   terraform init -backend-config=backend-minio.hcl.example
+
+bucket = "future20-tfstate"
+key    = "task2advanced/dev/terraform.tfstate"
+region = "us-east-1"
+
+endpoints = {
+  s3 = "http://localhost:9000"
+}
+
+skip_region_validation      = true
+skip_credentials_validation = true
+skip_requesting_account_id  = true
+skip_metadata_api_check     = true
+skip_s3_checksum            = true
+use_path_style              = true
+use_lockfile                = true

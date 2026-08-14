@@ -1,0 +1,23 @@
+# Скопируйте в terraform.tfvars и подставьте свои идентификаторы.
+# terraform.tfvars добавлен в .gitignore и в репозиторий не попадает.
+
+cloud_id  = "b1gxxxxxxxxxxxxxxxxx"
+folder_id = "b1gsssssssssssssssss" # каталог для служебных ресурсов (state, KMS, SA)
+
+bucket_name          = "future20-tfstate"
+state_retention_days = 90
+
+environments = {
+  dev = {
+    folder_id = "b1gyyyyyyyyyyyyyyyyy"
+    role      = "editor"
+  }
+  stage = {
+    folder_id = "b1gzzzzzzzzzzzzzzzzz"
+    role      = "editor"
+  }
+  prod = {
+    folder_id = "b1gpppppppppppppppppp"
+    role      = "editor"
+  }
+}

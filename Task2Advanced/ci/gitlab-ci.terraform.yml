@@ -1,0 +1,253 @@
+##############################################################################
+# GitLab CI: Terraform для dev / stage / prod.
+#
+# Принципы:
+#   1. Состояние только удалённое (S3 + use_lockfile). Локального state нет нигде.
+#   2. Секреты только в защищённых (protected + masked) переменных GitLab,
+#      отдельный набор на каждое окружение через scope окружения.
+#   3. plan никогда не применяется «на глаз»: apply использует ровно тот
+#      бинарный план, который был проверен на стадии plan (артефакт).
+#   4. apply в stage/prod — только вручную (when: manual) и только с
+#      защищённой ветки; prod дополнительно закрыт environment с approval.
+#   5. Каждое окружение — отдельный job, отдельный SA, отдельный каталог облака,
+#      отдельный префикс в бакете состояния. Компрометация dev не даёт доступ к prod.
+##############################################################################
+
+spec:
+  inputs:
+    terraform_version:
+      default: "1.11"
+    work_root:
+      default: "Task2Advanced/envs"
+---
+
+.terraform:
+  image:
+    name: hashicorp/terraform:$[[ inputs.terraform_version ]]
+    entrypoint: [""]
+  variables:
+    TF_ROOT: $[[ inputs.work_root ]]/$ENVIRONMENT
+    TF_IN_AUTOMATION: "true"
+    TF_INPUT: "0"
+    TF_CLI_ARGS_plan: "-lock-timeout=120s"
+    TF_CLI_ARGS_apply: "-lock-timeout=120s"
+  cache:
+    key: "tf-$ENVIRONMENT"
+    paths:
+      - $TF_ROOT/.terraform
+  before_script:
+    - cd "$TF_ROOT"
+    # Ключ сервисного аккаунта Yandex Cloud приходит из переменной типа File.
+    - export YC_SERVICE_ACCOUNT_KEY_FILE="$YC_SA_KEY_FILE"
+    # Доступ к бакету состояния (S3 API) — переменные AWS_* задаются в настройках проекта.
+    - terraform init -backend-config="backend-$ENVIRONMENT.hcl" -reconfigure
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+stages:
+  - validate
+  - security
+  - plan
+  - apply
+  - destroy
+
+##############################################################################
+# 1. Статические проверки — без доступа к облаку и без state.
+##############################################################################
+
+fmt:
+  stage: validate
+  image:
+    name: hashicorp/terraform:$[[ inputs.terraform_version ]]
+    entrypoint: [""]
+  script:
+    - terraform fmt -check -recursive -diff .
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+validate:
+  stage: validate
+  image:
+    name: hashicorp/terraform:$[[ inputs.terraform_version ]]
+    entrypoint: [""]
+  parallel:
+    matrix:
+      - ENVIRONMENT: [dev, stage, prod]
+  script:
+    - cd "$[[ inputs.work_root ]]/$ENVIRONMENT"
+    # -backend=false: валидация синтаксиса не требует доступа к состоянию и секретам.
+    - terraform init -backend=false
+    - terraform validate
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+##############################################################################
+# 2. Безопасность конфигурации: статический анализ IaC.
+##############################################################################
+
+tfsec:
+  stage: security
+  image:
+    name: aquasec/tfsec:latest
+    entrypoint: [""]
+  script:
+    - tfsec . --format=junit --out=tfsec-report.xml --soft-fail
+  artifacts:
+    when: always
+    reports:
+      junit: tfsec-report.xml
+    expire_in: 1 week
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+##############################################################################
+# 3. План. Формируется для всех окружений, сохраняется как артефакт.
+##############################################################################
+
+.plan:
+  extends: .terraform
+  stage: plan
+  script:
+    - terraform plan
+      -var-file="$ENVIRONMENT.tfvars"
+      -var="ssh_public_key=$TF_SSH_PUBLIC_KEY"
+      -out="$ENVIRONMENT.tfplan"
+    # Человекочитаемая версия плана — попадает в виджет merge request.
+    - terraform show -json "$ENVIRONMENT.tfplan" > "$ENVIRONMENT.tfplan.json"
+    - terraform show -no-color "$ENVIRONMENT.tfplan" > "$ENVIRONMENT.plan.txt"
+  artifacts:
+    name: "plan-$ENVIRONMENT-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - $TF_ROOT/$ENVIRONMENT.tfplan
+      - $TF_ROOT/$ENVIRONMENT.plan.txt
+    reports:
+      terraform: $TF_ROOT/$ENVIRONMENT.tfplan.json
+    # План может содержать чувствительные значения — храним недолго.
+    expire_in: 3 days
+  rules:
+    # По умолчанию план строится только для основной ветки: переменные stage и prod
+    # помечены как protected и в MR-пайплайнах недоступны.
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+plan:dev:
+  extends: .plan
+  variables:
+    ENVIRONMENT: dev
+  environment:
+    name: dev
+    action: prepare
+  rules:
+    # Исключение: dev-план показывается прямо в merge request — это главная
+    # ценность ревью инфраструктурных изменений. Переменные окружения dev
+    # намеренно НЕ protected, их компрометация не даёт доступа к stage/prod.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+plan:stage:
+  extends: .plan
+  variables:
+    ENVIRONMENT: stage
+  environment:
+    name: stage
+    action: prepare
+
+plan:prod:
+  extends: .plan
+  variables:
+    ENVIRONMENT: prod
+  environment:
+    name: prod
+    action: prepare
+
+##############################################################################
+# 4. Применение.
+#    dev   — автоматически после мержа в основную ветку;
+#    stage — вручную;
+#    prod  — вручную + approval на уровне окружения (Settings → CI/CD → Environments).
+##############################################################################
+
+.apply:
+  extends: .terraform
+  stage: apply
+  script:
+    # Применяется именно проверенный бинарный план: между plan и apply
+    # ничего не пересчитывается, drift не может «просочиться» в apply.
+    - terraform apply -auto-approve "$ENVIRONMENT.tfplan"
+    - terraform output -json > "outputs-$ENVIRONMENT.json"
+  artifacts:
+    paths:
+      - $TF_ROOT/outputs-$ENVIRONMENT.json
+    expire_in: 30 days
+
+apply:dev:
+  extends: .apply
+  variables:
+    ENVIRONMENT: dev
+  needs: ["plan:dev"]
+  environment:
+    name: dev
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+apply:stage:
+  extends: .apply
+  variables:
+    ENVIRONMENT: stage
+  needs: ["plan:stage"]
+  environment:
+    name: stage
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: false
+
+apply:prod:
+  extends: .apply
+  variables:
+    ENVIRONMENT: prod
+  needs: ["plan:prod", "apply:stage"]
+  environment:
+    name: prod
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: false
+
+##############################################################################
+# 5. Удаление окружения — только вручную и только для dev/stage.
+#    Для prod job не описан намеренно: destroy прода не должен быть
+#    доступен одной кнопкой в пайплайне.
+##############################################################################
+
+.destroy:
+  extends: .terraform
+  stage: destroy
+  script:
+    - terraform destroy -auto-approve
+      -var-file="$ENVIRONMENT.tfvars"
+      -var="ssh_public_key=$TF_SSH_PUBLIC_KEY"
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: true
+
+destroy:dev:
+  extends: .destroy
+  variables:
+    ENVIRONMENT: dev
+  environment:
+    name: dev
+    action: stop
+
+destroy:stage:
+  extends: .destroy
+  variables:
+    ENVIRONMENT: stage
+  environment:
+    name: stage
+    action: stop

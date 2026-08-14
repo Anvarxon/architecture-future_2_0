@@ -1,0 +1,80 @@
+##############################################################################
+# Переиспользуемый workflow применения плана к одному окружению.
+#
+# Вызывается из terraform.yml по цепочке dev → stage → prod.
+# Ручное подтверждение настраивается не в коде, а в Settings → Environments →
+# <env> → Required reviewers: job физически не стартует, пока approver не нажмёт
+# кнопку. Для prod дополнительно рекомендуется Deployment branch rule = main.
+##############################################################################
+
+name: terraform-apply
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    name: apply ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+    defaults:
+      run:
+        working-directory: Task2Advanced/envs/${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.11.4"
+          terraform_wrapper: false
+
+      - name: Скачать проверенный план
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ inputs.environment }}-${{ github.sha }}
+          path: Task2Advanced/envs/${{ inputs.environment }}
+
+      - name: Подготовить ключ сервисного аккаунта
+        run: |
+          umask 077
+          printf '%s' '${{ secrets.YC_SA_KEY_JSON }}' > "$RUNNER_TEMP/sa-key.json"
+          echo "YC_SERVICE_ACCOUNT_KEY_FILE=$RUNNER_TEMP/sa-key.json" >> "$GITHUB_ENV"
+
+      - name: terraform init
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.TFSTATE_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_SECRET_KEY }}
+        run: terraform init -backend-config=backend-${{ inputs.environment }}.hcl
+
+      # Применяется ровно тот бинарный план, который был проверен на стадии plan.
+      # Если состояние изменилось с момента plan, apply завершится ошибкой —
+      # это желаемое поведение, а не проблема.
+      - name: terraform apply
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.TFSTATE_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_SECRET_KEY }}
+        run: terraform apply -lock-timeout=120s -auto-approve ${{ inputs.environment }}.tfplan
+
+      - name: Опубликовать outputs
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.TFSTATE_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_SECRET_KEY }}
+        run: terraform output -json > outputs.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: outputs-${{ inputs.environment }}-${{ github.sha }}
+          path: Task2Advanced/envs/${{ inputs.environment }}/outputs.json
+          retention-days: 30
+
+      - name: Очистить ключ сервисного аккаунта
+        if: always()
+        run: shred -u "$RUNNER_TEMP/sa-key.json" || rm -f "$RUNNER_TEMP/sa-key.json"
