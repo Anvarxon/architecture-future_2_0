@@ -124,12 +124,32 @@ resource "yandex_resourcemanager_folder_iam_member" "ci_editor" {
   member    = "serviceAccount:${yandex_iam_service_account.ci[each.key].id}"
 }
 
-# Доступ к бакету состояния: чтение/запись только своего префикса.
+# Доступ к бакету состояния.
+#
+# Нужна именно storage.editor, а не storage.uploader: Terraform читает файл
+# состояния, перезаписывает его и удаляет объект блокировки (use_lockfile).
+# Роли, дающей только запись, для этого недостаточно.
+#
+# Роль выдаётся на каталог, то есть на бакет целиком. Разделение по префиксам
+# (`task2advanced/<env>/`) на этом уровне — организационное, а не техническое:
+# жёсткое ограничение требует политики бакета с условием на префикс ключа.
+# Это учтено как шаг усиления в README, раздел «Что осталось за рамками задания».
 resource "yandex_resourcemanager_folder_iam_member" "ci_state_access" {
   for_each = var.environments
 
   folder_id = var.folder_id
-  role      = "storage.uploader"
+  role      = "storage.editor"
+  member    = "serviceAccount:${yandex_iam_service_account.ci[each.key].id}"
+}
+
+# Содержимое бакета шифруется KMS-ключом, поэтому одних прав на Object Storage
+# недостаточно: без kms.keys.encrypterDecrypter запись объекта (включая объект
+# блокировки состояния) отклоняется с ошибкой 403 AccessDenied.
+resource "yandex_resourcemanager_folder_iam_member" "ci_kms" {
+  for_each = var.environments
+
+  folder_id = var.folder_id
+  role      = "kms.keys.encrypterDecrypter"
   member    = "serviceAccount:${yandex_iam_service_account.ci[each.key].id}"
 }
 
@@ -138,4 +158,16 @@ resource "yandex_iam_service_account_static_access_key" "ci" {
 
   service_account_id = yandex_iam_service_account.ci[each.key].id
   description        = "Ключ доступа к S3 API (state) для окружения ${each.key}"
+}
+
+# Авторизованный ключ (JSON) — им провайдер Yandex Cloud аутентифицируется в CI.
+# Статический ключ выше открывает доступ только к S3 API бакета состояния,
+# а для создания ВМ, сетей и дисков нужен именно авторизованный ключ:
+# он подставляется в переменную YC_SERVICE_ACCOUNT_KEY_FILE.
+resource "yandex_iam_service_account_key" "ci" {
+  for_each = var.environments
+
+  service_account_id = yandex_iam_service_account.ci[each.key].id
+  description        = "Авторизованный ключ CI/CD для окружения ${each.key}"
+  key_algorithm      = "RSA_2048"
 }

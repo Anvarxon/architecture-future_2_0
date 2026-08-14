@@ -4,8 +4,12 @@
 # Запуск: terraform apply -var-file=prod.tfvars
 ##############################################################################
 
-cloud_id  = "b1gxxxxxxxxxxxxxxxxx"
-folder_id = "b1gpppppppppppppppppp"
+# Идентификаторы облака НЕ хранятся в этом файле: они различаются между
+# инсталляциями и не являются частью профиля окружения. Передаются переменными
+# окружения TF_VAR_cloud_id и TF_VAR_folder_id (в CI — из переменных репозитория),
+# либо флагами -var при локальном запуске:
+#   terraform plan -var-file=prod.tfvars -var cloud_id=<id> -var folder_id=<id>
+
 
 environment = "prod"
 vm_name     = "app-prod"

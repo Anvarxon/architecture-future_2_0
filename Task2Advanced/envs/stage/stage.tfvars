@@ -3,9 +3,13 @@
 # Запуск: terraform apply -var-file=stage.tfvars
 ##############################################################################
 
-cloud_id  = "b1gxxxxxxxxxxxxxxxxx"
-folder_id = "b1gzzzzzzzzzzzzzzzzz"
-zone      = "ru-central1-b"
+# Идентификаторы облака НЕ хранятся в этом файле: они различаются между
+# инсталляциями и не являются частью профиля окружения. Передаются переменными
+# окружения TF_VAR_cloud_id и TF_VAR_folder_id (в CI — из переменных репозитория),
+# либо флагами -var при локальном запуске:
+#   terraform plan -var-file=stage.tfvars -var cloud_id=<id> -var folder_id=<id>
+
+zone = "ru-central1-b"
 
 environment = "stage"
 vm_name     = "app-stage"

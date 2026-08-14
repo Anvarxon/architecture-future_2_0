@@ -16,7 +16,7 @@
 spec:
   inputs:
     terraform_version:
-      default: "1.11"
+      default: "1.15"
     work_root:
       default: "Task2Advanced/envs"
 ---
@@ -113,6 +113,8 @@ tfsec:
   extends: .terraform
   stage: plan
   script:
+    # TF_VAR_cloud_id и TF_VAR_folder_id задаются переменными проекта
+    # со scope окружения — в .tfvars идентификаторов облака нет.
     - terraform plan
       -var-file="$ENVIRONMENT.tfvars"
       -var="ssh_public_key=$TF_SSH_PUBLIC_KEY"

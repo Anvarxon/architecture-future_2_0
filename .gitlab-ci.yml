@@ -3,5 +3,5 @@
 include:
   - local: Task2Advanced/ci/gitlab-ci.terraform.yml
     inputs:
-      terraform_version: "1.11"
+      terraform_version: "1.15"
       work_root: "Task2Advanced/envs"

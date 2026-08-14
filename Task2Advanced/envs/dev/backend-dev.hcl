@@ -1,7 +1,7 @@
 # Неконфиденциальные параметры backend'а для окружения dev.
 # Ключи доступа передаются переменными окружения AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY.
 
-bucket = "future20-tfstate"
+bucket = "future20-tfstate-uz01"
 key    = "task2advanced/dev/terraform.tfstate"
 region = "ru-central1"
 

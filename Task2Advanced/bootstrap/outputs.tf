@@ -31,6 +31,38 @@ output "ci_access_keys" {
   }
 }
 
+output "cloud_id" {
+  description = "ID облака — попадает в переменную репозитория YC_CLOUD_ID."
+  value       = var.cloud_id
+}
+
+output "environment_folder_ids" {
+  description = "Карта: окружение -> ID каталога. Попадает в переменную YC_FOLDER_ID соответствующего окружения."
+  value       = { for env, cfg in var.environments : env => cfg.folder_id }
+}
+
+output "ci_authorized_keys" {
+  description = <<-EOT
+    Карта: окружение -> авторизованный ключ сервисного аккаунта в формате JSON.
+    Это содержимое секрета YC_SA_KEY_JSON (GitHub) / YC_SA_KEY_FILE (GitLab).
+    Значение sensitive: выгружается один раз командой
+    `terraform output -json ci_authorized_keys` и сразу переносится в секреты CI.
+  EOT
+  sensitive   = true
+
+  value = {
+    for env, key in yandex_iam_service_account_key.ci :
+    env => jsonencode({
+      id                 = key.id
+      service_account_id = key.service_account_id
+      created_at         = key.created_at
+      key_algorithm      = key.key_algorithm
+      public_key         = key.public_key
+      private_key        = key.private_key
+    })
+  }
+}
+
 output "backend_config_hint" {
   description = "Готовая подсказка по заполнению backend-*.hcl."
   value = {

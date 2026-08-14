@@ -11,7 +11,7 @@
 #   export AWS_SECRET_ACCESS_KEY=minioadmin
 #   terraform init -backend-config=backend-minio.hcl.example
 
-bucket = "future20-tfstate"
+bucket = "future20-tfstate-uz01"
 key    = "task2advanced/dev/terraform.tfstate"
 region = "us-east-1"
 
