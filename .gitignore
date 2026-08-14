@@ -1,0 +1,36 @@
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+.terraform.lock.hcl.bak
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Значения переменных с реальными идентификаторами и секретами.
+# Примеры (*.tfvars.example) и конфигурации окружений заданий — в репозитории.
+terraform.tfvars
+terraform.tfvars.json
+*.auto.tfvars
+!*.tfvars.example
+
+# Ключи
+*.pem
+*.key
+sa-key.json
+*-sa-key.json
+.ssh/
+
+# Планы и выгрузки
+plan.txt
+outputs*.json
+
+# ОС и редакторы
+.DS_Store
+.idea/
+.vscode/
+*.swp

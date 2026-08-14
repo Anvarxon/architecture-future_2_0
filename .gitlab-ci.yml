@@ -1,0 +1,7 @@
+# Корневой конвейер репозитория.
+# Вся логика Terraform вынесена в переиспользуемый компонент Task2Advanced/ci/.
+include:
+  - local: Task2Advanced/ci/gitlab-ci.terraform.yml
+    inputs:
+      terraform_version: "1.15"
+      work_root: "Task2Advanced/envs"

@@ -1,0 +1,203 @@
+##############################################################################
+# GitHub Actions: Terraform для dev / stage / prod.
+#
+# Модель безопасности:
+#   * секреты хранятся в GitHub Environments (dev / stage / prod), а не в
+#     секретах репозитория — job получает только секреты своего окружения;
+#   * apply в stage и prod требует ручного подтверждения через Required reviewers
+#     в настройках соответствующего Environment (это и есть «кнопка approval»);
+#   * состояние — только в S3-совместимом хранилище, локального state нет;
+#   * права workflow минимальны (contents: read), запись только в комментарий PR.
+##############################################################################
+
+name: terraform
+
+on:
+  pull_request:
+    paths:
+      - "Task1Advanced/**"
+      - "Task2Advanced/**"
+      - ".github/workflows/terraform.yml"
+  push:
+    branches: [main]
+    paths:
+      - "Task1Advanced/**"
+      - "Task2Advanced/**"
+      - ".github/workflows/terraform.yml"
+  workflow_dispatch:
+
+concurrency:
+  # Параллельные пайплайны по одной ветке отменяются: состояние блокируется
+  # на уровне backend'а, но лишние гонки лучше исключить заранее.
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TF_VERSION: "1.15.8"
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "0"
+
+permissions:
+  contents: read
+
+jobs:
+  ##########################################################################
+  # 1. Статические проверки: форматирование и синтаксис. Без секретов.
+  ##########################################################################
+  validate:
+    name: validate (${{ matrix.env }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [dev, stage, prod]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive -diff Task1Advanced Task2Advanced
+
+      - name: terraform validate
+        working-directory: Task2Advanced/envs/${{ matrix.env }}
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+  ##########################################################################
+  # 2. Статический анализ безопасности IaC.
+  ##########################################################################
+  security:
+    name: security scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: .
+          soft_fail: true
+
+  ##########################################################################
+  # 3. План. Секреты берутся из окружения matrix.env.
+  ##########################################################################
+  plan:
+    name: plan (${{ matrix.env }})
+    needs: [validate]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # В pull request строим план только для dev: секреты stage и prod
+        # не должны быть доступны пайплайну непроверенной ветки.
+        env: ${{ github.event_name == 'pull_request' && fromJSON('["dev"]') || fromJSON('["dev","stage","prod"]') }}
+    environment:
+      # На стадии plan защита окружения не требует ревью: план ничего не меняет.
+      name: ${{ matrix.env }}-plan
+    defaults:
+      run:
+        working-directory: Task2Advanced/envs/${{ matrix.env }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Контекст secrets недоступен в условиях `if` на уровне job и step,
+      # поэтому наличие учётных данных проверяется через env в отдельном шаге.
+      # Пока секреты окружения не заведены, план пропускается с пояснением,
+      # а не падает с невнятной ошибкой аутентификации S3-backend'а.
+      - name: Проверить наличие учётных данных
+        id: creds
+        env:
+          TFSTATE_KEY: ${{ secrets.TFSTATE_ACCESS_KEY }}
+          YC_KEY: ${{ secrets.YC_SA_KEY_JSON }}
+        run: |
+          if [ -n "$TFSTATE_KEY" ] && [ -n "$YC_KEY" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Terraform plan пропущен::Секреты окружения ${{ matrix.env }} не настроены. Инструкция — Task2Advanced/README.md, раздел «Настройка перед первым запуском»."
+          fi
+
+      - uses: hashicorp/setup-terraform@v3
+        if: steps.creds.outputs.configured == 'true'
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Подготовить ключ сервисного аккаунта
+        if: steps.creds.outputs.configured == 'true'
+        run: |
+          umask 077
+          printf '%s' '${{ secrets.YC_SA_KEY_JSON }}' > "$RUNNER_TEMP/sa-key.json"
+          echo "YC_SERVICE_ACCOUNT_KEY_FILE=$RUNNER_TEMP/sa-key.json" >> "$GITHUB_ENV"
+
+      - name: terraform init
+        if: steps.creds.outputs.configured == 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.TFSTATE_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_SECRET_KEY }}
+        run: terraform init -backend-config=backend-${{ matrix.env }}.hcl
+
+      - name: terraform plan
+        if: steps.creds.outputs.configured == 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.TFSTATE_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_SECRET_KEY }}
+          TF_VAR_ssh_public_key: ${{ vars.SSH_PUBLIC_KEY }}
+          # Идентификаторы облака приходят из переменных окружения GitHub,
+          # а не из .tfvars: конфигурация остаётся переносимой между инсталляциями.
+          TF_VAR_cloud_id: ${{ vars.YC_CLOUD_ID }}
+          TF_VAR_folder_id: ${{ vars.YC_FOLDER_ID }}
+        run: |
+          terraform plan -lock-timeout=120s \
+            -var-file=${{ matrix.env }}.tfvars \
+            -out=${{ matrix.env }}.tfplan
+          terraform show -no-color ${{ matrix.env }}.tfplan > plan.txt
+
+      - name: Сохранить план
+        if: steps.creds.outputs.configured == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ matrix.env }}-${{ github.sha }}
+          path: |
+            Task2Advanced/envs/${{ matrix.env }}/${{ matrix.env }}.tfplan
+            Task2Advanced/envs/${{ matrix.env }}/plan.txt
+          retention-days: 3
+
+      - name: Очистить ключ сервисного аккаунта
+        if: always()
+        run: shred -u "$RUNNER_TEMP/sa-key.json" 2>/dev/null || rm -f "$RUNNER_TEMP/sa-key.json"
+
+  ##########################################################################
+  # 4. Применение. Только из main (или ручного запуска), строго по цепочке
+  #    dev → stage → prod. Подтверждение — через Required reviewers у Environment.
+  ##########################################################################
+  apply-dev:
+    name: apply dev
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    needs: [plan]
+    uses: ./.github/workflows/terraform-apply.yml
+    with:
+      environment: dev
+    secrets: inherit
+
+  apply-stage:
+    name: apply stage
+    if: github.ref == 'refs/heads/main'
+    needs: [apply-dev]
+    uses: ./.github/workflows/terraform-apply.yml
+    with:
+      environment: stage
+    secrets: inherit
+
+  apply-prod:
+    name: apply prod
+    if: github.ref == 'refs/heads/main'
+    needs: [apply-stage]
+    uses: ./.github/workflows/terraform-apply.yml
+    with:
+      environment: prod
+    secrets: inherit

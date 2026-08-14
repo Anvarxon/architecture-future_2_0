@@ -1,0 +1,101 @@
+name,ring,quadrant,isNew,description
+Event-Driven Architecture,Adopt,Patterns & Practices,TRUE,Целевой способ взаимодействия доменов вместо синхронных вызовов через Camel
+Domain-Driven Design / Bounded Contexts,Adopt,Patterns & Practices,TRUE,Границы доменов по бизнес-способностям как основа независимого развития
+Data Mesh,Adopt,Patterns & Practices,TRUE,Доменное владение данными и дата-продуктами вместо центрального DWH
+Data Contracts,Adopt,Patterns & Practices,TRUE,Схема + семантика + SLA + класс конфиденциальности как код
+Self-service BI,Adopt,Patterns & Practices,TRUE,Портал самообслуживания: отчёт строит сотрудник в пределах своего доступа
+Infrastructure as Code,Adopt,Patterns & Practices,FALSE,Все среды из Terraform-модулей; ручные изменения запрещены
+Change Data Capture,Adopt,Patterns & Practices,TRUE,Включение легаси-DWH в событийный контур без переписывания
+Transactional Outbox,Adopt,Patterns & Practices,TRUE,Атомарность изменения состояния и публикации события
+Anti-Corruption Layer,Adopt,Patterns & Practices,TRUE,Изоляция моделей легаси от новых доменов
+Strangler Fig,Adopt,Patterns & Practices,TRUE,Поэтапный вывод легаси с тестом на паритет
+Schema-first + Schema Registry,Adopt,Patterns & Practices,TRUE,Контроль обратной совместимости контрактов в CI
+ABAC / RLS + маскирование,Adopt,Patterns & Practices,TRUE,"Доступ по атрибутам сотрудника, предикаты подставляются до исполнения"
+Псевдонимизация PHI на границе домена,Adopt,Patterns & Practices,TRUE,Техническая гарантия непопадания медданных в аналитику
+Medallion (bronze/silver/gold),Adopt,Patterns & Practices,TRUE,Единая структура слоёв дата-продукта
+FinOps: разметка ресурсов,Adopt,Patterns & Practices,TRUE,Метки домен/окружение/центр затрат обязательны
+CQRS,Trial,Patterns & Practices,TRUE,Домены с разными профилями чтения и записи
+Event Sourcing (точечно),Trial,Patterns & Practices,TRUE,"Агрегаты с важной историей: договоры, согласия, проводки"
+Streaming data products,Trial,Patterns & Practices,TRUE,Near-real-time витрины на пилотных доменах
+Semantic layer as code,Trial,Patterns & Practices,TRUE,Определения метрик в Git с ревью
+Policy as Code (OPA),Trial,Patterns & Practices,TRUE,Правила доступа и правила платформы вне кода приложений
+Contract testing,Trial,Patterns & Practices,TRUE,Тесты подписчиков в конвейере издателя
+Fitness functions в CI,Trial,Patterns & Practices,TRUE,Автоматический контроль архитектурных ограничений
+Data product SLO,Trial,Patterns & Practices,TRUE,Свежесть и полнота как обязательство владельца
+Game days,Trial,Patterns & Practices,TRUE,Учения по отказам событийной магистрали
+Feature Store,Trial,Patterns & Practices,TRUE,Переиспользование признаков внутри медицинского контура
+Федеративное обучение,Assess,Patterns & Practices,TRUE,Обучение моделей без выноса PHI за пределы клиники
+Differential privacy,Assess,Patterns & Practices,TRUE,Публикация тонких срезов без риска реидентификации
+Zero-copy data sharing,Assess,Patterns & Practices,TRUE,Обмен дата-продуктами с партнёрами без копирования
+Reverse ETL,Assess,Patterns & Practices,TRUE,Возврат аналитических признаков в операционные системы
+LLM-ассистент витрины (text-to-SQL),Assess,Patterns & Practices,TRUE,Снижение порога входа при соблюдении прав доступа
+Active metadata / auto lineage,Assess,Patterns & Practices,TRUE,Происхождение данных без ручного описания
+Монетизация дата-продуктов и ИИ,Assess,Patterns & Practices,TRUE,Внешние потребители как источник выручки
+Бизнес-логика в хранимых процедурах DWH,Hold,Patterns & Practices,FALSE,Корневая причина медленного time-to-market
+Общая база как интеграция,Hold,Patterns & Practices,FALSE,"Схема, которую читают все, не может изменяться"
+ETL-логика в Camel-маршрутах,Hold,Patterns & Practices,FALSE,Третье место хранения бизнес-логики
+Синхронные интеграции на критическом пути,Hold,Patterns & Practices,FALSE,Каскадные отказы; отключаются на этапе 3
+Кастомизации BI поверх сырых таблиц DWH,Hold,Patterns & Practices,FALSE,Каждое направление требует правки центральной модели
+Единая универсальная модель данных,Hold,Patterns & Practices,FALSE,Не масштабируется на несколько бизнес-направлений
+Ручные выгрузки в Excel,Hold,Patterns & Practices,FALSE,Неаудируемый канал распространения данных
+Yandex Cloud,Adopt,Platforms,TRUE,Целевая облачная среда
+Managed Apache Kafka,Adopt,Platforms,TRUE,Событийная магистраль
+Object Storage (S3),Adopt,Platforms,TRUE,Lakehouse и состояние Terraform
+Apache Iceberg,Adopt,Platforms,TRUE,Табличный формат lakehouse с эволюцией схемы
+Kubernetes,Adopt,Platforms,FALSE,Среда исполнения доменных сервисов
+PostgreSQL,Adopt,Platforms,FALSE,Операционные БД доменов
+Keycloak / IdP,Adopt,Platforms,FALSE,Единая идентификация и атрибуты для ABAC
+Trino,Trial,Platforms,TRUE,Федеративный SQL без копирования данных
+Apache Flink,Trial,Platforms,TRUE,Потоковые витрины и near-real-time агрегация
+ClickHouse,Trial,Platforms,TRUE,Оперативные витрины с субсекундным откликом
+DataHub / OpenMetadata,Trial,Platforms,TRUE,Каталог дата-продуктов и lineage
+MLflow,Trial,Platforms,TRUE,Реестр моделей и воспроизводимость заключений
+Power BI поверх семантического слоя,Trial,Platforms,FALSE,Сохранение инструмента без кастомизаций поверх DWH
+Iceberg REST Catalog,Assess,Platforms,TRUE,Единый каталог таблиц для нескольких движков
+Kafka Tiered Storage,Assess,Platforms,TRUE,Удешевление длительного хранения лога
+Геораспределённое развёртывание,Assess,Platforms,TRUE,Локализация данных в новых регионах
+Векторная БД,Assess,Platforms,TRUE,Поиск по медицинским документам в защищённом контуре
+Serverless-обработка данных,Assess,Platforms,TRUE,Экономика нерегулярных нагрузок
+Microsoft SQL Server 2008,Hold,Platforms,FALSE,Вне поддержки; вывод к 36 месяцу
+Собственное оборудование в ЦОД,Hold,Platforms,FALSE,Стоимость поддержки устаревшего парка
+Apache Camel как целевая шина,Hold,Platforms,FALSE,Только мост совместимости с датой вывода
+Power BI Premium как единственная точка отчётности,Hold,Platforms,FALSE,Не даёт самообслуживания при росте числа доменов
+Terraform / OpenTofu,Adopt,Tools,FALSE,Описание всех сред как кода
+dbt,Adopt,Tools,TRUE,"Трансформации, принадлежащие домену"
+Apache Airflow,Adopt,Tools,FALSE,Оркестрация конвейеров данных
+Debezium,Adopt,Tools,TRUE,CDC из БД доменов и легаси-DWH
+Schema Registry (Avro),Adopt,Tools,TRUE,Контроль совместимости схем событий
+GitLab CI / GitHub Actions,Adopt,Tools,FALSE,Конвейеры с ручным подтверждением применения
+Prometheus + Grafana,Adopt,Tools,FALSE,Наблюдаемость платформы
+KMS / Lockbox + защищённые переменные CI,Adopt,Tools,TRUE,Хранение секретов вне репозитория
+tfsec / checkov,Adopt,Tools,TRUE,Статический анализ безопасности инфраструктурного кода
+Great Expectations / Soda,Trial,Tools,TRUE,Тесты качества как часть выпуска дата-продукта
+OpenTelemetry,Trial,Tools,TRUE,Сквозная трассировка по correlation_id
+Apache Superset / DataLens,Trial,Tools,TRUE,Конструктор отчётов портала самообслуживания
+Open Policy Agent,Trial,Tools,TRUE,Политики доступа к дата-продуктам
+Backstage,Trial,Tools,TRUE,Портал разработчика и каталог сервисов
+Karapace,Trial,Tools,TRUE,Открытая альтернатива реестру схем
+dbt Semantic Layer / Cube,Assess,Tools,TRUE,Метрики как переиспользуемый слой
+Flink SQL Gateway,Assess,Tools,TRUE,Потоковые витрины силами аналитиков
+AsyncAPI,Assess,Tools,TRUE,Описание событийных API
+Автоматическое обнаружение PII,Assess,Tools,TRUE,Поиск чувствительных полей в схемах
+Conftest / политики Terraform,Assess,Tools,TRUE,Правила инфраструктуры как код
+PowerBuilder,Hold,Tools,FALSE,Исчерпан рынок специалистов
+Локальное хранение состояния Terraform,Hold,Tools,FALSE,Состояние только в защищённом удалённом хранилище
+Самописные T-SQL ETL-скрипты,Hold,Tools,FALSE,Логика возвращается в доменные сервисы
+Секреты в конфигурационных файлах,Hold,Tools,FALSE,Только защищённые переменные и KMS
+Python,Adopt,Languages & Frameworks,FALSE,ИИ-сервисы и обработка данных
+Go,Adopt,Languages & Frameworks,FALSE,Высоконагруженные финтех-сервисы
+Java / Kotlin,Adopt,Languages & Frameworks,FALSE,Доменные сервисы клиник и кредитования
+SQL,Adopt,Languages & Frameworks,FALSE,Язык дата-продуктов и трансформаций
+TypeScript + React,Adopt,Languages & Frameworks,TRUE,Веб-интерфейс операторов вместо PowerBuilder
+Avro,Adopt,Languages & Frameworks,TRUE,Сериализация событий с контролем совместимости
+Spring Boot 3 / Quarkus,Trial,Languages & Frameworks,TRUE,Стандартизация JVM-сервисов
+FastAPI,Trial,Languages & Frameworks,FALSE,Сервисы инференса
+Flink SQL,Trial,Languages & Frameworks,TRUE,Потоковые витрины декларативно
+Protobuf + gRPC,Trial,Languages & Frameworks,TRUE,Оставшиеся синхронные вызовы внутри контекста
+Rust,Assess,Languages & Frameworks,TRUE,Компоненты с жёсткими требованиями к задержкам
+Kotlin Multiplatform,Assess,Languages & Frameworks,TRUE,Переиспользование доменной логики
+PowerBuilder (4GL),Hold,Languages & Frameworks,FALSE,Нет пути к современным интеграциям
+T-SQL как место бизнес-логики,Hold,Languages & Frameworks,FALSE,Логика переносится в домены
+VBA / макросы Excel,Hold,Languages & Frameworks,FALSE,Неаудируемая и невоспроизводимая логика
